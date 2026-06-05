@@ -1,0 +1,18 @@
+# MD simulation files
+*.xtc
+*.trr
+*.tpr
+*.gro
+*.edr
+
+# mindist outputs
+*mindist.xvg
+mindist_or.xvg
+
+# summaries
+histogram_summary.txt
+lifetime_summary.txt
+
+# Python
+__pycache__/
+*.pyc
