@@ -65,6 +65,8 @@ for (n, line) in enumerate(lines):
     bind[n] = elements[1] # column for binding state
 
     if n == 0: # prevents n-1 issue where first iteration compares itself to the last line of file
+        if int(bind[n]) == 1:
+            st = n
         continue
 
     current = int(bind[n]) # current binding state
@@ -78,6 +80,11 @@ for (n, line) in enumerate(lines):
         lifetime = (et - st)*10 # calculates binding time
         data.append(lifetime) # adds event for data
 
+# If ion is still bound at the end, close the event at the last frame
+if N > 0 and int(bind[N-1]) == 1:
+    et = N - 1
+    lifetime = (et - st) * 10
+    data.append(lifetime)
     
 #print(data) # for debugging
 print(len(data)) # prints number of recorded lifetimes

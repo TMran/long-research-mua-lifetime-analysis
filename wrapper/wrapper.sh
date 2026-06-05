@@ -195,4 +195,7 @@ EOF
 
 echo "Submitting ${SLURM_SCRIPT}..."
 
-sbatch "$SLURM_SCRIPT"
+echo "Dry run complete. Slurm script created but not submitted."
+echo "Check ${SLURM_SCRIPT} before running sbatch."
+
+# sbatch "$SLURM_SCRIPT"
