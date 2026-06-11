@@ -63,6 +63,8 @@ for (n, line) in enumerate(lines):
     bind[n] = elements[1]
 
     if n == 0: # prevents wrap around at beginning of file
+        if int(bind[n]) == 1:
+            st = n
         continue
 
     current = int(bind[n]) # current binding state
@@ -76,6 +78,11 @@ for (n, line) in enumerate(lines):
         lifetime = (et - st)*10
         data.append(lifetime)
 
+# If ion is still bound at the end, close the event at the last frame
+if N > 0 and int(bind[N-1]) == 1:
+    et = N - 1
+    lifetime = (et - st) * 10
+    data.append(lifetime)
 
 custom_bins = [10, 20, 100, 300, 1000, 10000, 100010]
 hist, bin_edges = numpy.histogram(data, bins = custom_bins)
