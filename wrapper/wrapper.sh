@@ -1,22 +1,32 @@
 #!/bin/bash
 # wrapper.sh
 # Wrapper script for MUA ion lifetime + histogram analysis.
+#
 # Goal:
-#   1. Create ion list from prod.gro
+#   1. Create an ion list from prod.gro
 #   2. Extract selected ion indices from mindist_or.xvg
-#   3. Submit Slurm job to run per-ion mindist
-#   4. Slurm job then runs lifetime + histogram summaries
+#   3. Create a Slurm job for per-ion gmx mindist calculations
+#   4. Run lifetime and histogram summaries after mindist completes
+#
+# Important naming distinction:
+#   GROMACS_ION_NAME = name used inside prod.gro/template.ndx (for example MG)
+#   ION_LABEL        = real ion name used in generated output files (for example SR)
+#
+# Examples:
+#   Calcium:   GROMACS_ION_NAME="CAL" and ION_LABEL="CAL"
+#   Magnesium: GROMACS_ION_NAME="MG"  and ION_LABEL="MG"
+#   Strontium: GROMACS_ION_NAME="MG"  and ION_LABEL="SR"
+#   Barium:    GROMACS_ION_NAME="MG"  and ION_LABEL="BAR"
 
 # =========================
 # USER SETTINGS
 # =========================
 
-# Ion prefix used in files and residue/atom names
-# Default is CAL if no input is given.
-# Usage:
-#   bash wrapper.sh
-#   bash wrapper.sh MG
-IONNAME="${1:-CAL}"
+# Name used inside GROMACS files and index groups.
+GROMACS_ION_NAME="CAL"
+
+# Real ion name used in generated output filenames.
+ION_LABEL="CAL"
 
 # Input files
 TRAJ="prod.xtc"
@@ -25,26 +35,31 @@ GRO="prod.gro"
 TEMPLATE_NDX="template.ndx"
 WORK_NDX="index.ndx"
 
-# Existing screening output from:   
-# gmx mindist -or
+# Existing screening output from gmx mindist -or
 SCREEN_FILE="mindist_or.xvg"
 
 # Analysis settings
 CUTOFF="0.6"
 START_TIME="100000"
-END_TIME="200000"   
+END_TIME="200000"
 
-# # GROMACS group numbers for per-ion mindist
-# # Selection order for per-ion mindist:
-# #   C1 first
-# #   TAR second
-# SURFACE_GROUP_NUM="9"   # C1
-# TARGET_GROUP_NUM="13"   # TAR
+# Slurm settings
+PARTITION="mlong"
+GRES="gpu"
+MEMORY="4gb"
+NTASKS_PER_NODE="1"
+NODES="1"
+COMPILER_MODULE="compiler/gcc/11"
+GROMACS_MODULE="gromacs-gpu/2024.1"
+
+# Set to "yes" to submit automatically, or "no" for a dry run.
+SUBMIT_JOB="no"
 
 # Output files
-ION_TXT="${IONNAME}.txt"
+ION_TXT="${ION_LABEL}.txt"
 SELECTED_IONS="selected_ions.txt"
-SLURM_SCRIPT="mindist_auto.slurm"
+GROUP_NUMBERS_FILE="group_numbers.txt"
+SLURM_SCRIPT="${ION_LABEL}_mindist_auto.slurm"
 
 # =========================
 # SAFETY CHECKS
@@ -52,54 +67,68 @@ SLURM_SCRIPT="mindist_auto.slurm"
 
 echo "Checking required files..."
 
+missing_files=()
+
 for file in "$TRAJ" "$TPR" "$GRO" "$TEMPLATE_NDX" "$SCREEN_FILE" \
-            "ion_index.py" "ionlifeMUA.py" "hionlifeMUA.py" \
-            "run_lifetimesMUA.sh" "run_histogramMUA.sh"; do
+            "get_group_numbers.py" "ion_index.py" "ionlifeMUA.py" \
+            "hionlifeMUA.py" "run_lifetimesMUA.sh" \
+            "run_histogramMUA.sh"; do
     if [[ ! -f "$file" ]]; then
-        echo "Missing required file: $file"
-        exit 1
+        missing_files+=("$file")
     fi
 done
 
+if (( ${#missing_files[@]} > 0 )); then
+    echo "Missing required files:"
+    for file in "${missing_files[@]}"; do
+        echo "  - $file"
+    done
+    exit 1
+fi
+
 echo "All required files found."
+echo "Internal GROMACS ion name: ${GROMACS_ION_NAME}"
+echo "Output ion label: ${ION_LABEL}"
 
 # =========================
-# Get group numbers from template.ndx
+# GET GROUP NUMBERS
 # =========================
 
 echo "Getting group numbers from ${TEMPLATE_NDX}..."
 
-python get_group_numbers.py "$TEMPLATE_NDX" "$IONNAME"
+# Remove any old output so a failed run cannot reuse stale values.
+rm -f "$GROUP_NUMBERS_FILE"
 
-if [[ ! -f group_numbers.txt ]]; then
-    echo "Failed to create group_numbers.txt"
+if ! python get_group_numbers.py "$TEMPLATE_NDX" "$GROMACS_ION_NAME"; then
+    echo "Failed to determine GROMACS group numbers."
     exit 1
 fi
 
-source group_numbers.txt
+if [[ ! -f "$GROUP_NUMBERS_FILE" ]]; then
+    echo "Failed to create ${GROUP_NUMBERS_FILE}."
+    exit 1
+fi
+
+source "$GROUP_NUMBERS_FILE"
 
 echo "Using group numbers:"
 echo "  ${ION_GROUP_NAME}: ${ION_GROUP_NUM}"
 echo "  ${SURFACE_GROUP_NAME}: ${SURFACE_GROUP_NUM}"
 echo "  ${TARGET_GROUP_NAME}: ${TARGET_GROUP_NUM}"
 
-
-
-
-
 # =========================
 # STEP 1: MAKE ION TEXT FILE
 # =========================
 
-echo "Creating ${ION_TXT} from ${GRO}..."
+echo "Creating ${ION_TXT} from ${GRO} using internal name ${GROMACS_ION_NAME}..."
 
-grep "$IONNAME" "$GRO" > "$ION_TXT"
+grep "$GROMACS_ION_NAME" "$GRO" > "$ION_TXT"
 
-# Fix spacing so ion_index.py can parse correctly
-sed -i "s/ ${IONNAME}/${IONNAME} /g" "$ION_TXT"
+# Fix spacing so ion_index.py can parse correctly.
+sed -i "s/ ${GROMACS_ION_NAME}/${GROMACS_ION_NAME} /g" "$ION_TXT"
 
 if [[ ! -s "$ION_TXT" ]]; then
-    echo "No ions matching ${IONNAME} found in ${GRO}"
+    echo "No ions matching ${GROMACS_ION_NAME} found in ${GRO}."
     exit 1
 fi
 
@@ -113,7 +142,7 @@ echo "Extracting selected ions from ${SCREEN_FILE}..."
     | awk 'NF >= 2 {print $2}' > "$SELECTED_IONS"
 
 if [[ ! -s "$SELECTED_IONS" ]]; then
-    echo "No ions found within cutoff ${CUTOFF}"
+    echo "No ions found within cutoff ${CUTOFF}."
     exit 1
 fi
 
@@ -126,21 +155,21 @@ cat "$SELECTED_IONS"
 
 echo "Writing ${SLURM_SCRIPT}..."
 
-cat > "$SLURM_SCRIPT" << EOF
+cat > "$SLURM_SCRIPT" << EOF_SLURM
 #!/bin/bash
-#SBATCH --job-name=${IONNAME}_mindist
-#SBATCH --output=${IONNAME}_mindist.out
-#SBATCH --error=${IONNAME}_mindist.err
-#SBATCH --partition=mlong
-#SBATCH --gres=gpu
-#SBATCH --mem=4gb
-#SBATCH --ntasks-per-node=1
-#SBATCH --nodes=1
+#SBATCH --job-name=${ION_LABEL}_mindist
+#SBATCH --output=${ION_LABEL}_mindist.out
+#SBATCH --error=${ION_LABEL}_mindist.err
+#SBATCH --partition=${PARTITION}
+#SBATCH --gres=${GRES}
+#SBATCH --mem=${MEMORY}
+#SBATCH --ntasks-per-node=${NTASKS_PER_NODE}
+#SBATCH --nodes=${NODES}
 
 module purge
-module load compiler/gcc/11 gromacs-gpu/2024.1
+module load ${COMPILER_MODULE} ${GROMACS_MODULE}
 
-IONNAME="${IONNAME}"
+ION_LABEL="${ION_LABEL}"
 TRAJ="${TRAJ}"
 TPR="${TPR}"
 TEMPLATE_NDX="${TEMPLATE_NDX}"
@@ -152,7 +181,7 @@ SURFACE_GROUP_NUM="${SURFACE_GROUP_NUM}"
 TARGET_GROUP_NUM="${TARGET_GROUP_NUM}"
 SELECTED_IONS="${SELECTED_IONS}"
 
-echo "Starting per-ion mindist analysis..."
+echo "Starting per-ion mindist analysis for \\${ION_LABEL}..."
 
 while read -r i
 do
@@ -166,7 +195,7 @@ do
     sed -i "s/Tar/\${i}/" "\$WORK_NDX"
 
     gmx mindist -f "\$TRAJ" -s "\$TPR" -n "\$WORK_NDX" \\
-        -on "\${IONNAME}\${i}mindist.xvg" \\
+        -on "\${ION_LABEL}\${i}mindist.xvg" \\
         -b "\$START_TIME" -e "\$END_TIME" \\
         -d "\$CUTOFF" -group << GROUPS
 \$SURFACE_GROUP_NUM
@@ -178,24 +207,26 @@ done < "\$SELECTED_IONS"
 echo "Per-ion mindist complete."
 
 echo "Running lifetime summary..."
-bash run_lifetimesMUA.sh "\$IONNAME"
+bash run_lifetimesMUA.sh "\$ION_LABEL"
 
 echo "Running histogram summary..."
-bash run_histogramMUA.sh "\$IONNAME"
+bash run_histogramMUA.sh "\$ION_LABEL"
 
 echo "Pipeline complete."
 echo "Outputs:"
 echo "  lifetime_summary.txt"
 echo "  histogram_summary.txt"
-EOF
+EOF_SLURM
 
 # =========================
 # STEP 4: SUBMIT JOB
 # =========================
 
-echo "Submitting ${SLURM_SCRIPT}..."
-
-echo "Dry run complete. Slurm script created but not submitted."
-echo "Check ${SLURM_SCRIPT} before running sbatch."
-
-# sbatch "$SLURM_SCRIPT"
+if [[ "$SUBMIT_JOB" == "yes" ]]; then
+    echo "Submitting ${SLURM_SCRIPT}..."
+    sbatch "$SLURM_SCRIPT"
+else
+    echo "Dry run complete. Slurm script created but not submitted."
+    echo "Review it with: less ${SLURM_SCRIPT}"
+    echo "Submit it with: sbatch ${SLURM_SCRIPT}"
+fi
