@@ -28,3 +28,28 @@ The wrapper will eventually:
 ```text
 [ TAR ]
 Tar
+
+
+
+
+
+
+Required files: prod.xtc, prod.tpr, prod.gro, template.ndx, mindist_or.xvg, and all wrapper/scripts.
+
+$bash wrapper.sh CAL
+
+$sbatch mindist_auto.slurm #current doesn't submit file for testing purposes
+
+squeue -u/p ...
+
+check files
+
+head lifetime_summary.txt
+tail lifetime_summary.txt
+
+head histogram_summary.txt
+tail histogram_summary.txt
+
+to rerun summaries without rerunning entire wrapper
+bash run_lifetimesMUA.sh CAL
+bash run_histogramMUA.sh CAL
