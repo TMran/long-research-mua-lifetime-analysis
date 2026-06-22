@@ -20,6 +20,13 @@ prod.tpr
 prod.xtc
 ```
 
+Run from an interactive compute node with Python loaded:
+
+```bash
+module load python/3.9
+srun --pty $SHELL 
+```
+
 Set `GROMACS_ION_NAME` and `ION_LABEL` in `wrapper.sh`.
 
 Then run:
