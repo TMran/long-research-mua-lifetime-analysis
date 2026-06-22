@@ -1,6 +1,18 @@
 # MUA Ion Lifetime Analysis
 
-Place the scripts with:
+Place these scripts in the same directory:
+
+```text
+wrapper.sh
+get_group_numbers.py
+ion_index.py
+ionlifeMUA.py
+hionlifeMUA.py
+run_lifetimesMUA.sh
+run_histogramMUA.sh
+```
+
+Also include:
 
 ```text
 prod.gro
@@ -25,6 +37,10 @@ bash run_histogramMUA.sh <ION_LABEL>
 ```
 
 Ion settings:
+
+```text
+GROMACS_ION_NAME / ION_LABEL
+```
 
 ```text
 Calcium:   CAL / CAL
