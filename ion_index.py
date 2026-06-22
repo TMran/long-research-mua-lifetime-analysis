@@ -15,6 +15,7 @@ cutoff is distance cutoff in nm
 # IMPORTS
 #=============================================================================================
 
+from fileinput import filename
 import sys
 import numpy        # for numerical work
 import os           # For interacting with the operating system
@@ -29,24 +30,23 @@ filename1 = sys.argv[1]   # read in file from the command line
 filename2 = sys.argv[2]   # read in file from the command line
 cutoff = float(sys.argv[3])   # read in file from the command line
 
-nheaderlines = 24 # number of header lines
-
 #=============================================================================================
+
 # Open file for reading.
 infile = open(filename1, 'r')
 
-# Read all lines.
-lines = infile.readlines()
+# Read all lines, skips top header lines starting with # or @
+lines = []
+for line in infile:
+    if line.startswith('#') or line.startswith('@'):
+        continue
+    lines.append(line)
 
 # Close file.
 infile.close()
 
-# Discard header.
-lines = lines[nheaderlines:]
-
 # Determine number of timesteps in file.
 num_ion = len(lines)
-#print N
 
 #Parse data.
 data = numpy.zeros([num_ion], numpy.float64)
