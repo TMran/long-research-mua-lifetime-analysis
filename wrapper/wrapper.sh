@@ -449,16 +449,10 @@ done < "\$SELECTED_IONS"
 
 echo "Per-ion mindist complete."
 
-echo "Running lifetime summary..."
-bash run_lifetimesMUA.sh "\$ION_LABEL"
+echo "Complete analysis by running:
+echo " bash run_lifetimesMUA.sh \"\$ION_LABEL\"" 
+echo " bash run_histogramMUA.sh \"\$ION_LABEL\""
 
-echo "Running histogram summary..."
-bash run_histogramMUA.sh "\$ION_LABEL"
-
-echo "Pipeline complete."
-echo "Outputs:"
-echo "  lifetime_summary.txt"
-echo "  histogram_summary.txt"
 EOF_SLURM
 
 # =========================
